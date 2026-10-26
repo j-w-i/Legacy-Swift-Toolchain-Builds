@@ -1,0 +1,3 @@
+# Local scratch output from tools/publish.sh and tools/make-manifest.sh
+release-assets/
+*.tar.gz

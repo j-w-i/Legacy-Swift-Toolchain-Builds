@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "toolchains": {
+    "5.10.1": {
+      "github": {
+        "repository": "j-w-i/Legacy-Swift-Toolchain-Builds",
+        "tag": "latest",
+        "asset": "swift-5.10.1-ios5.xctoolchain.tar.gz"
+      },
+      "format": "tar.gz",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "5.1.5": {
+      "github": {
+        "repository": "j-w-i/Legacy-Swift-Toolchain-Builds",
+        "tag": "latest",
+        "asset": "swift-5.1.5-ios6-runtime.xctoolchain.tar.gz"
+      },
+      "format": "tar.gz",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  }
+}

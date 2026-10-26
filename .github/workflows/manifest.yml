@@ -1,0 +1,39 @@
+name: release manifest
+
+# Keeps release-manifest.json in sync with the newest release. The manifest itself points at
+# "tag": "latest", so publishing a release immediately makes the kit resolve the new build; this
+# workflow only has to refresh the two SHA-256 values.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-manifest
+  cancel-in-progress: false
+
+jobs:
+  manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Hash the latest release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./tools/make-manifest.sh --latest --output release-manifest.json
+      - name: Commit the manifest if it changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- release-manifest.json; then
+            echo "release-manifest.json already matches the latest release"
+            exit 0
+          fi
+          git add release-manifest.json
+          git commit -m "Update release manifest for the latest release"
+          git push
