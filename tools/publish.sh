@@ -10,7 +10,8 @@
 #   --repo         owner/repo (default: j-w-i/Legacy-Swift-Toolchain-Builds)
 #   --notes-file   release notes; defaults to a short generated description
 #
-# Environment: GITHUB_TOKEN with repo scope (falls back to `gh auth token`), python3, tar, shasum.
+# Environment: GITHUB_TOKEN with repo scope (falls back to `gh auth token`), python3, tar, shasum, curl.
+# Network calls use the system curl so the platform trust store applies.
 set -euo pipefail
 
 REPO="${PUBLISH_REPOSITORY:-j-w-i/Legacy-Swift-Toolchain-Builds}"
@@ -22,6 +23,7 @@ RUNTIME_DIR=swift-5.1.5-ios6-runtime.xctoolchain
 COMPILER_ASSET="$COMPILER_DIR.tar.gz"
 RUNTIME_ASSET="$RUNTIME_DIR.tar.gz"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+CURL=/usr/bin/curl
 
 die() { echo "publish: $*" >&2; exit 1; }
 while [ $# -gt 0 ]; do
@@ -55,17 +57,17 @@ else
   tar -czf "$STAGE/$RUNTIME_ASSET" -C "$OUT" "$RUNTIME_DIR"
 fi
 
-# Refuse to publish a non-relocatable archive: exactly one .xctoolchain root and no absolute symlinks.
+# Refuse to publish something the kit would reject: exactly one .xctoolchain root per archive.
 for asset in "$COMPILER_ASSET" "$RUNTIME_ASSET"; do
-  listing="$(tar tzf "$STAGE/$asset")"
-  roots="$(printf '%s\n' "$listing" | cut -d/ -f1 | sort -u)"
+  roots="$(tar tzf "$STAGE/$asset" | cut -d/ -f1 | sort -u)"
   [ "$(printf '%s\n' "$roots" | wc -l | tr -d ' ')" = "1" ] || die "$asset must contain exactly one top-level entry"
   case "$roots" in *.xctoolchain) ;; *) die "$asset top-level entry is not a .xctoolchain" ;; esac
 done
-echo "archive sizes: $(du -h "$STAGE/$COMPILER_ASSET" "$STAGE/$RUNTIME_ASSET" | awk '{printf "%s %s  ", $1, $2}')"
+echo "archive sizes:"
+du -h "$STAGE/$COMPILER_ASSET" "$STAGE/$RUNTIME_ASSET" | sed 's/^/  /'
 
 SHAS="$(cd "$STAGE" && shasum -a 256 "$COMPILER_ASSET" "$RUNTIME_ASSET")"
-printf '%s\n' "$SHAS"
+printf '%s\n' "$SHAS" | sed 's/^/  /'
 
 BODY="From-source build of the dual iOS 5/6 Swift toolchains.
 
@@ -75,54 +77,45 @@ BODY="From-source build of the dual iOS 5/6 Swift toolchains.
 Produced by j-w-i/Swift-5.10.1-for-iOS-5-6 utils/legacy-ios5-mac/build-all.sh. Device execution remains unverified; iOS 5 is statically qualified."
 if [ -n "$NOTES_FILE" ]; then BODY="$(cat "$NOTES_FILE")"; fi
 
+/usr/bin/python3 - "$TAG" "$BODY" > "$STAGE/release-body.json" <<'JSON'
+import json, sys
+tag, body = sys.argv[1], sys.argv[2]
+print(json.dumps({"tag_name": tag, "name": tag, "body": body, "draft": False, "prerelease": False}))
+JSON
+
 echo "creating release $TAG in $REPO"
-python3 - "$REPO" "$TAG" "$BODY" "$TOKEN" > "$STAGE/release.json" <<'PY'
-import json, sys, urllib.request
-repo, tag, body, token = sys.argv[1:5]
-request = urllib.request.Request(
-    "https://api.github.com/repos/%s/releases" % repo,
-    data=json.dumps({"tag_name": tag, "name": tag, "body": body, "draft": False, "prerelease": False}).encode(),
-    headers={"Authorization": "token " + token, "Accept": "application/vnd.github+json",
-             "Content-Type": "application/json"},
-    method="POST",
-)
-with urllib.request.urlopen(request) as response:
-    print(response.read().decode())
-PY
-RELEASE_ID="$(python3 -c "import json;print(json.load(open('$STAGE/release.json'))['id'])")"
-[ -n "$RELEASE_ID" ] || die "release creation failed"
-echo "release id $RELEASE_ID; uploading assets"
+STATUS="$("$CURL" -sS -o "$STAGE/release.json" -w '%{http_code}' -X POST \
+  -H "Authorization: token $TOKEN" -H "Accept: application/vnd.github+json" \
+  -H "Content-Type: application/json" --data-binary @"$STAGE/release-body.json" \
+  "https://api.github.com/repos/$REPO/releases")"
+if [ "$STATUS" != "201" ]; then
+  echo "release creation failed (HTTP $STATUS):" >&2
+  cat "$STAGE/release.json" >&2
+  die "nothing was published"
+fi
+RELEASE_ID="$(/usr/bin/python3 -c "import json;print(json.load(open('$STAGE/release.json'))['id'])")"
+[ -n "$RELEASE_ID" ] || die "release creation returned no id"
+echo "release id $RELEASE_ID"
 
 for asset in "$COMPILER_ASSET" "$RUNTIME_ASSET"; do
-  file="$STAGE/$asset"
-  echo "uploading $asset ($(du -h "$file" | cut -f1))"
-  python3 - "$REPO" "$RELEASE_ID" "$file" "$asset" "$TOKEN" <<'PY'
-import os, sys, urllib.request
-repo, release_id, path, name, token = sys.argv[1:6]
-size = os.path.getsize(path)
-headers = {"Authorization": "token " + token, "Content-Type": "application/gzip",
-           "Content-Length": str(size), "Accept": "application/vnd.github+json"}
-request = urllib.request.Request(
-    "https://uploads.github.com/repos/%s/releases/%s/assets?name=%s" % (repo, release_id, name),
-    headers=headers, method="POST")
-# Stream the body instead of loading a multi-hundred-MB archive into memory.
-with open(path, "rb") as payload:
-    request.data = payload
-    with urllib.request.urlopen(request) as response:
-        print("  uploaded", name, str(response.status))
-PY
+  echo "uploading $asset ($(du -h "$STAGE/$asset" | cut -f1 | tr -d ' '))"
+  STATUS="$("$CURL" -sS -o "$STAGE/upload.json" -w '%{http_code}' --retry 2 -X POST \
+    -H "Authorization: token $TOKEN" -H "Accept: application/vnd.github+json" \
+    -H "Content-Type: application/gzip" --data-binary @"$STAGE/$asset" \
+    "https://uploads.github.com/repos/$REPO/releases/$RELEASE_ID/assets?name=$asset")"
+  if [ "$STATUS" != "201" ]; then
+    echo "upload of $asset failed (HTTP $STATUS):" >&2
+    cat "$STAGE/upload.json" >&2
+    die "release $TAG exists but its assets are incomplete; delete it and retry"
+  fi
 done
 
-echo "refreshing local manifest from the uploaded archives"
-"$HERE/make-manifest.sh" --assets "$STAGE" --output "$HERE/../release-manifest.json" || {
-  echo "publish: assets uploaded, but manifest refresh failed; run tools/make-manifest.sh --latest" >&2
-  exit 1
-}
+echo "refreshing release-manifest.json from the packaged archives"
+"$HERE/make-manifest.sh" --assets "$STAGE" --output "$HERE/../release-manifest.json"
 
 echo
-echo "Published $TAG."
+echo "Published $TAG"
 echo "  manifest: https://raw.githubusercontent.com/$REPO/main/release-manifest.json"
 echo "  release:  https://github.com/$REPO/releases/tag/$TAG"
-echo "The release also triggers .github/workflows/manifest.yml, which commits the same manifest if it changed."
-echo "Commit and push release-manifest.json so the kit's 'latest' sees the new hashes:"
+echo "The release also triggers .github/workflows/manifest.yml. Commit and push the updated manifest:"
 echo "  git add release-manifest.json && git commit -m 'Update release manifest for $TAG' && git push"
