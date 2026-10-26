@@ -25,7 +25,17 @@ jobs:
       - name: Hash the latest release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./tools/make-manifest.sh --latest --output release-manifest.json
+        run: |
+          # A release created through the API can fire before its assets finish uploading; retry briefly.
+          for attempt in 1 2 3 4 5; do
+            if ./tools/make-manifest.sh --latest --output release-manifest.json; then
+              exit 0
+            fi
+            echo "attempt $attempt could not hash the latest release yet; retrying in 20s"
+            sleep 20
+          done
+          echo "could not hash the latest release assets" >&2
+          exit 1
       - name: Commit the manifest if it changed
         run: |
           git config user.name "github-actions[bot]"

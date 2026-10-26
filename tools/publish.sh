@@ -80,7 +80,7 @@ if [ -n "$NOTES_FILE" ]; then BODY="$(cat "$NOTES_FILE")"; fi
 /usr/bin/python3 - "$TAG" "$BODY" > "$STAGE/release-body.json" <<'JSON'
 import json, sys
 tag, body = sys.argv[1], sys.argv[2]
-print(json.dumps({"tag_name": tag, "name": tag, "body": body, "draft": False, "prerelease": False}))
+print(json.dumps({"tag_name": tag, "name": tag, "body": body, "draft": True, "prerelease": False}))
 JSON
 
 echo "creating release $TAG in $REPO"
@@ -109,6 +109,19 @@ for asset in "$COMPILER_ASSET" "$RUNTIME_ASSET"; do
     die "release $TAG exists but its assets are incomplete; delete it and retry"
   fi
 done
+
+# Publish only once both assets are attached: a release published before its assets exist makes the
+# manifest workflow run with nothing to hash. Create it as a draft, upload, then publish.
+echo "publishing release $RELEASE_ID"
+STATUS="$("$CURL" -sS -o "$STAGE/publish.json" -w '%{http_code}' -X PATCH \
+  -H "Authorization: token $TOKEN" -H "Accept: application/vnd.github+json" \
+  -H "Content-Type: application/json" --data-binary '{"draft":false}' \
+  "https://api.github.com/repos/$REPO/releases/$RELEASE_ID")"
+if [ "$STATUS" != "200" ]; then
+  echo "publishing the release failed (HTTP $STATUS):" >&2
+  cat "$STAGE/publish.json" >&2
+  die "release $TAG is still a draft with its assets; publish it manually or delete it and retry"
+fi
 
 echo "refreshing release-manifest.json from the packaged archives"
 "$HERE/make-manifest.sh" --assets "$STAGE" --output "$HERE/../release-manifest.json"
