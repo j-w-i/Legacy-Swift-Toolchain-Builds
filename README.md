@@ -119,15 +119,9 @@ assets of the latest release, rewrites the manifest, and commits it if anything 
 manifest points at `"tag": "latest"`, publishing a new release makes the kit pick it up without any other
 edit; the workflow only has to refresh the two SHA-256 values (and re-attach the manifest asset).
 
-App-only updates go straight onto the newest release, without repackaging the toolchains:
-
-```bash
-GITHUB_TOKEN=<repo-scoped token> \
-  tools/publish-app.sh --app "path/to/build/Legacy Swift Development Kit.app"
-```
-
-It refuses to touch a release that does not already carry both toolchain assets and the manifest, so the
-app is only replaced where `releases/latest/download` also serves the toolchains and manifest.
+App-only changes are published in the next release by passing `--app` to `tools/publish.sh`. That creates a
+new release with fresh asset URLs, which matters because replacing a file under an existing
+`releases/latest/download` URL can be served stale by GitHub's asset cache for a few minutes.
 
 ## Publish a new build
 

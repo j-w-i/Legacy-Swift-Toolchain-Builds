@@ -53,4 +53,14 @@ jobs:
           fi
           git add release-manifest.json
           git commit -m "Update release manifest for the latest release"
-          git push
+          # A local publish may have committed the same manifest concurrently; rebase and retry.
+          for attempt in 1 2 3 4 5; do
+            git pull --rebase --autostash origin main || true
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "push attempt $attempt failed; retrying"
+            sleep 5
+          done
+          echo "could not push the updated manifest" >&2
+          exit 1
