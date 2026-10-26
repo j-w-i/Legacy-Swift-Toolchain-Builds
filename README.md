@@ -15,7 +15,7 @@ runtime (with `atomic.c` linked in) and the legacy overlays are all compiled in 
 |---|---|
 | `swift-5.10.1-ios5.xctoolchain.tar.gz` | The complete toolchain: Swift 5.10.1 compiler/driver/frontend and clang (from source), the source-built iOS stdlib as default resources (14 fat dylibs, armv7+armv7s+arm64; 16 modules incl. `_Concurrency`), and `usr/lib/swift_ios5` with the source-built Swift 5.1.5 runtime plus rebuilt legacy overlays (47 dylibs). Includes `ios5-assembly-receipt.json`; host binaries are ad-hoc signed. |
 | `swift-5.1.5-ios6-runtime.xctoolchain.tar.gz` | Runtime-only Swift 5.1.5 toolchain for the iOS 6 guide route: 42 armv7 dylibs whose `___atomic_store`/`___atomic_load`/`___atomic_compare_exchange` symbols are defined **inside** the dylibs (`nm -u` shows zero `__atomic_*` imports), so they load on iOS 6.1.x. |
-| `release-manifest.json` (also committed to `main`) | The manifest the kit consumes. Its entries use `"tag": "latest"`, so the kit always resolves the newest release. |
+| `release-manifest.json` | The manifest the kit consumes, attached to every release and also committed to `main`. Its entries use `"tag": "latest"`, so the kit always resolves the newest release. |
 
 Both archives contain exactly one `.xctoolchain` folder with no absolute or escaping symlinks, so the kit's
 local import and its GitHub download path both accept them.
@@ -24,8 +24,12 @@ local import and its GitHub download path both accept them.
 
 1. Open **Legacy Swift Development Kit** → sources.
 2. Set the manifest URL to
+   `https://github.com/j-w-i/Legacy-Swift-Toolchain-Builds/releases/latest/download/release-manifest.json`
+   This stable URL always redirects to the manifest attached to the newest release, so it never serves a
+   stale hash after a new build is published. (The committed copy at
    `https://raw.githubusercontent.com/j-w-i/Legacy-Swift-Toolchain-Builds/main/release-manifest.json`
-   (or choose a local copy of this repository's `release-manifest.json`).
+   is equivalent, but raw.githubusercontent.com caches for a few minutes.) You can also choose a local copy
+   of `release-manifest.json`.
 3. Select your Xcode 13.4.1 source and click **Install Environment**. The kit downloads both assets from
    the newest release, verifies each SHA-256 from the manifest before extracting, imports both toolchains,
    and then runs the iOS 5 qualification automatically.
@@ -62,11 +66,11 @@ Requirements are the kit's: macOS 12+, an Xcode 13.4.1 `.app`/`.xip` source for 
 }
 ```
 
-`release-manifest.json` on `main` is regenerated automatically. `.github/workflows/manifest.yml` runs
+`release-manifest.json` is regenerated automatically and attached to every release. `.github/workflows/manifest.yml` runs
 whenever a release is published (or manually via **Actions → release manifest → Run workflow**), hashes the
 assets of the latest release, rewrites the manifest, and commits it if anything changed. Because the
 manifest points at `"tag": "latest"`, publishing a new release makes the kit pick it up without any other
-edit; the workflow only has to refresh the two SHA-256 values.
+edit; the workflow only has to refresh the two SHA-256 values (and re-attach the manifest asset).
 
 ## Publish a new build
 
@@ -80,8 +84,10 @@ GITHUB_TOKEN=<token with repo scope> \
 
 `publish.sh` packages `out/swift-5.10.1-ios5.xctoolchain` and
 `out/swift-5.1.5-ios6-runtime.xctoolchain`, creates a release tagged `v<UTC date and time>`, uploads both
-assets, and calls `tools/make-manifest.sh` locally. Publishing the release also triggers the workflow, which
-regenerates and commits the manifest, so new builds become the kit's `latest` automatically.
+assets, adds `release-manifest.json`, and only then publishes the release (a draft is used so a release is
+never visible before its assets). Publishing also triggers the workflow, which re-hashes the assets,
+re-attaches the manifest and commits the updated copy, so new builds become the kit's `latest`
+automatically.
 
 You can also do it by hand: create a release on GitHub, attach the two assets with these exact names,
 publish it (`gh release create <tag> swift-5.10.1-ios5.xctoolchain.tar.gz
