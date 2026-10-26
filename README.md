@@ -16,9 +16,36 @@ runtime (with `atomic.c` linked in) and the legacy overlays are all compiled in 
 | `swift-5.10.1-ios5.xctoolchain.tar.gz` | The complete toolchain: Swift 5.10.1 compiler/driver/frontend and clang (from source), the source-built iOS stdlib as default resources (14 fat dylibs, armv7+armv7s+arm64; 16 modules incl. `_Concurrency`), and `usr/lib/swift_ios5` with the source-built Swift 5.1.5 runtime plus rebuilt legacy overlays (47 dylibs). Includes `ios5-assembly-receipt.json`; host binaries are ad-hoc signed. |
 | `swift-5.1.5-ios6-runtime.xctoolchain.tar.gz` | Runtime-only Swift 5.1.5 toolchain for the iOS 6 guide route: 42 armv7 dylibs whose `___atomic_store`/`___atomic_load`/`___atomic_compare_exchange` symbols are defined **inside** the dylibs (`nm -u` shows zero `__atomic_*` imports), so they load on iOS 6.1.x. |
 | `release-manifest.json` | The manifest the kit consumes, attached to every release and also committed to `main`. Its entries use `"tag": "latest"`, so the kit always resolves the newest release. |
+| `Legacy-Swift-Development-Kit.app.zip` (release `app-latest`) | The kit app itself (universal, macOS 12+, ad-hoc signed). Published separately from the toolchain releases so its URL stays stable. |
 
 Both archives contain exactly one `.xctoolchain` folder with no absolute or escaping symlinks, so the kit's
 local import and its GitHub download path both accept them.
+
+## Get the kit app
+
+```
+https://github.com/j-w-i/Legacy-Swift-Toolchain-Builds/releases/download/app-latest/Legacy-Swift-Development-Kit.app.zip
+```
+
+Unzip it, move `Legacy Swift Development Kit.app` to `/Applications`, and launch it. The build is ad-hoc
+signed, not notarized, so Gatekeeper needs a one-time approval: right-click the app → **Open**, or
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Legacy Swift Development Kit.app"
+```
+
+On first launch the toolchain manifest URL is already filled in. You still need your own **Xcode 13.4.1**
+`.app`/`.xip` from Apple Developer Downloads (the app never downloads Xcode) and about **64 GiB free** while
+the environment is staged; then select the Xcode source and click **Install Environment**.
+
+To publish a new app build:
+
+```bash
+GITHUB_TOKEN=<repo-scoped token> tools/publish-app.sh \
+  --app "path/to/build/Legacy Swift Development Kit.app"
+```
+
+The `app-latest` tag is reused and the app asset replaced, so the URL above never changes.
 
 ## Use it in the kit
 
