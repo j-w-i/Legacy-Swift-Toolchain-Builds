@@ -38,6 +38,32 @@ Alternatively import the two archives as local sources if you do not want the ki
 Requirements are the kit's: macOS 12+, an Xcode 13.4.1 `.app`/`.xip` source for the environment, and about
 64 GiB free while staging.
 
+## Download without the app
+
+`tools/download.sh` resolves a manifest and fetches everything it describes, verifying each SHA-256 from
+the manifest before extracting:
+
+```bash
+cd Legacy-Swift-Toolchain-Builds
+./tools/download.sh --output ~/Desktop/legacy-swift-toolchains
+# or against another manifest/file:
+./tools/download.sh --manifest ./release-manifest.json --output /tmp/toolchains
+```
+
+It reads the manifest (default: the stable URL above), resolves each GitHub entry — including
+`"tag": "latest"` — locates the exact asset name, downloads it, checks the SHA-256, and extracts the single
+`.xctoolchain` folder. The result can be imported into the kit as local sources, or you can point the kit's
+manifest source at the URL and let the app do the same work.
+
+The equivalent by hand:
+
+```bash
+curl -fsSL "https://github.com/j-w-i/Legacy-Swift-Toolchain-Builds/releases/latest/download/release-manifest.json" -o manifest.json
+# for each entry in manifest.json's toolchains:
+#   resolve github.repository + "releases/latest" + github.asset, download that asset,
+#   compare `shasum -a 256` with the entry's sha256, then `tar xzf` it
+```
+
 ## Manifest
 
 ```json
