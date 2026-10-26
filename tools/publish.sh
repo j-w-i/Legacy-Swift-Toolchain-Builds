@@ -110,7 +110,24 @@ for asset in "$COMPILER_ASSET" "$RUNTIME_ASSET"; do
   fi
 done
 
-# Publish only once both assets are attached: a release published before its assets exist makes the
+echo "refreshing release-manifest.json from the packaged archives"
+"$HERE/make-manifest.sh" --assets "$STAGE" --output "$HERE/../release-manifest.json"
+
+# The stable manifest URL is https://github.com/<repo>/releases/latest/download/release-manifest.json,
+# which GitHub redirects to the newest release's asset. Attach it before publishing so a just-published
+# release never lacks its manifest.
+echo "uploading release-manifest.json"
+STATUS="$("$CURL" -sS -o "$STAGE/upload.json" -w '%{http_code}' --retry 2 -X POST \
+  -H "Authorization: token $TOKEN" -H "Accept: application/vnd.github+json" \
+  -H "Content-Type: application/json" --data-binary @"$HERE/../release-manifest.json" \
+  "https://uploads.github.com/repos/$REPO/releases/$RELEASE_ID/assets?name=release-manifest.json")"
+if [ "$STATUS" != "201" ]; then
+  echo "upload of release-manifest.json failed (HTTP $STATUS):" >&2
+  cat "$STAGE/upload.json" >&2
+  die "release $TAG is a draft without its manifest; delete it and retry"
+fi
+
+# Publish only once every asset is attached: a release published before its assets exist makes the
 # manifest workflow run with nothing to hash. Create it as a draft, upload, then publish.
 echo "publishing release $RELEASE_ID"
 STATUS="$("$CURL" -sS -o "$STAGE/publish.json" -w '%{http_code}' -X PATCH \
@@ -123,12 +140,10 @@ if [ "$STATUS" != "200" ]; then
   die "release $TAG is still a draft with its assets; publish it manually or delete it and retry"
 fi
 
-echo "refreshing release-manifest.json from the packaged archives"
-"$HERE/make-manifest.sh" --assets "$STAGE" --output "$HERE/../release-manifest.json"
-
 echo
 echo "Published $TAG"
-echo "  manifest: https://raw.githubusercontent.com/$REPO/main/release-manifest.json"
+echo "  manifest (stable): https://github.com/$REPO/releases/latest/download/release-manifest.json"
+echo "  manifest (committed copy): https://raw.githubusercontent.com/$REPO/main/release-manifest.json"
 echo "  release:  https://github.com/$REPO/releases/tag/$TAG"
 echo "The release also triggers .github/workflows/manifest.yml. Commit and push the updated manifest:"
 echo "  git add release-manifest.json && git commit -m 'Update release manifest for $TAG' && git push"
