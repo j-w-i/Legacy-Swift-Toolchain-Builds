@@ -8,7 +8,7 @@
         "asset": "swift-5.10.1-ios5.xctoolchain.tar.gz"
       },
       "format": "tar.gz",
-      "sha256": "f455973a1369ea9cdf0b5bc37af39aecfb9613843c0529280945ab9b6dabd1cc"
+      "sha256": "a104bd2d96a4f63226ff9d28429aebb04c32da4b0bf415f7aab74db78f614456"
     },
     "5.1.5": {
       "github": {
