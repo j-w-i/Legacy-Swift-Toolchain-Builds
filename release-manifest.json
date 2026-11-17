@@ -8,7 +8,7 @@
         "asset": "swift-5.10.1-ios5.xctoolchain.tar.gz"
       },
       "format": "tar.gz",
-      "sha256": "12008e4deb834992dbcc4df9d3117c0d423635dcf8d97902f2c0ad371f1b089e"
+      "sha256": "a492581b78faa1a7c54e85c4d9c7946477bee9538672c00be1353754717292df"
     },
     "5.1.5": {
       "github": {
@@ -17,7 +17,7 @@
         "asset": "swift-5.1.5-ios6-runtime.xctoolchain.tar.gz"
       },
       "format": "tar.gz",
-      "sha256": "a1b7d6863b421738539b257faea9448152e416a324c729f005356d0adf17c703"
+      "sha256": "8c833941d3319467bd548bfe5b800bba06490208de48dc75adbc8de65e93a2be"
     }
   }
 }
